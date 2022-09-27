@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC</title>
+    <style>
+        body{
+            background-color: antiquewhite;
+        }
+        .container {
+            display: flex; /* or inline-flex */
+            column-gap: 3em;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .item {
+            align-self: center;
+        }
+        .container2{
+            display: flex;
+            gap: 1em;
+            justify-content: center;
+        }
+        .container3{
+            display: flex;
+            justify-content: space-evenly;
+            flex-wrap: wrap;
+        }
+        .box{
+            align-self: center;
+            height: 300px;
+            width: 300px;
+        }
+        video{
+            height: 200px;
+            width: 200px;
+            border: 1px solid black;
+            align-self: center;
+            background-color: beige;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="item"><h2>Você</h2></div>
+        <video src="#" autoplay playsinline controls="false"></video>
+        <div class="container2">
+            <button onclick="videoStart()">Iniciar video</button>
+            <button onclick="createOffer()">Create ICE offer</button>
+        </div>
+        <div class="container2">
+            <input type="text" id="peer">
+            <button onclick="iniciarPeer()">Iniciar peer</button>
+        </div>
+        <div class="container2">
+            <textarea rows="6" cols="40" id="ICE" disabled></textarea>
+            <textarea rows="6" cols="40" id="answer" disabled></textarea>
+        </div>
+    </div>
+    <div class="container3">
+    </div>
+    
+    <script>
+    
+        const configuration = {'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}]}
+        let stack = []
+        let pc = []
+        let ice = document.getElementById("ICE");
+        let answer = document.getElementById("answer");
+        let localStream;
+        let remoteStream;
+
+        function createOffer() {
+            let peerConnection = new RTCPeerConnection(configuration);
+            peerConnection.ontrack = e => {
+                remoteStream = e.streams[0];
+            }
+            const dc = peerConnection.createDataChannel("channel");
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            stack.push(peerConnection);
+            peerConnection.onicecandidate = e => {
+                ice.value = JSON.stringify(peerConnection.localDescription)
+            }
+            
+            
+            dc.onopen = e => drawPeer();
+            peerConnection.createOffer().then( o => 
+                peerConnection.setLocalDescription(o)    
+            ).then(p => console.log("set succesfully"))
+        }
+        
+        function videoStart() {
+            const constraints = {
+                audio: true,
+                video: { width: 200, height: 200 }
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints)
+            .then((mediaStream) => {
+                const video = document.querySelector('video');
+                video.srcObject = mediaStream;
+                video.onloadedmetadata = () => {
+                video.play();
+                };
+                localStream = mediaStream;
+                
+            })
+            .catch((err) => {
+                // always check for errors at the end.
+                console.error(`${err.name}: ${err.message}`);
+            });
+        }
+        function iniciarPeer() {
+            let peer = JSON.parse(document.getElementById("peer").value)
+            switch (peer["type"]) {
+                case "offer":
+                    answerPeer(peer)
+                    break;
+                case "answer":
+                    let pc = stack.pop();
+                    pc.setRemoteDescription(peer)
+                default:
+                    break;
+            }
+        }
+        function answerPeer(peer) {
+            let peerConnection = new RTCPeerConnection(configuration);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            peerConnection.ontrack = e => {
+                remoteStream = e.streams[0];
+            }
+            peerConnection.onicecandidate = e => answer.value = JSON.stringify(peerConnection.localDescription)
+            peerConnection.ondatachannel = e => {
+                peerConnection.dc = e.channel;
+                peerConnection.dc.onopen = drawPeer()
+            }
+            peerConnection.setRemoteDescription(peer).then(a => console.log("offer set"))
+            peerConnection.createAnswer().then(a => peerConnection.setLocalDescription(a)).then(a => console.log("answer created"))
+        }
+
+        function drawPeer() {
+            let iDiv = document.createElement('div');
+            iDiv.className = 'box';
+            
+            let header = document.createElement('h2');
+            header.innerText = "Peer"
+            iDiv.appendChild(header);
+            let video = document.createElement('video');
+            video.autoplay = true;
+            video.playsInline = true;
+            video.controls = false;
+            let rnd = getRandomInt(1,999999);
+            video.id = "video" + rnd;
+            console.log("video" + rnd);
+            iDiv.appendChild(video);
+            let button = document.createElement('button');
+            button.onclick = () => alert("Stop");
+            button.innerText = "Stop"
+            iDiv.appendChild(button)
+            let resume = document.createElement('button');
+            resume.onclick = () =>  alert("Resume");
+            resume.innerText = "Resume"
+            iDiv.appendChild(resume)
+            document.getElementsByClassName('container3')[0].appendChild(iDiv);
+            setStream("video" + rnd);
+        }
+        function setStream(id) {
+            const remoteVideo = document.getElementById(id);
+            remoteVideo.srcObject = remoteStream;
+
+        }
+        function getRandomInt(min, max) {
+            min = Math.ceil(min);
+            max = Math.floor(max);
+            return Math.floor(Math.random() * (max - min) + min); // The maximum is exclusive and the minimum is inclusive
+        }
+    </script>
+</body>
+</html>
