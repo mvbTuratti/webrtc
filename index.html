@@ -77,10 +77,19 @@
             peerConnection.ontrack = e => {
                 remoteStream = e.streams[0];
             }
+    
             const dc = peerConnection.createDataChannel("channel");
             dc.onmessage = e => {
                 [id, cmd] = e.data.split("=");
-                console.log(id)
+                pc.forEach( p => {
+                    if (p["id"] == id){
+                        if (cmd == 1){
+                            localStream.getTracks().forEach(track => p["pc"].addTrack(track, localStream));
+                        } else {
+                            localStream.getTracks().forEach(track => peerConnection.removeTrack(track, localStream));
+                        }
+                    }
+                })
             };
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             stack.push({"id": client, "pc":peerConnection, "dc": dc});
@@ -141,7 +150,16 @@
                 peerConnection.dc = e.channel;
                 peerConnection.dc.onmessage = e => {
                     [id, cmd] = e.data.split("=");
-                    console.log(id)
+                    console.log("cmd = " + cmd)
+                    pc.forEach( p => {
+                        if (p["id"] == id){
+                            if (cmd){
+                                localStream.getTracks().forEach(track => p["pc"].addTrack(track, localStream));
+                            } else {
+                                localStream.getTracks().forEach(track => peerConnection.removeTrack(track, localStream));
+                            }
+                        }
+                    })
                 }
                 peerConnection.dc.onopen = e => {
                     pc.push({"id":peer["id"], "pc": peerConnection, "dc": peerConnection.dc});
@@ -170,7 +188,11 @@
                 console.log(`p = ${ {p} }`)
                 console.log(`pid = ${pid}`)
                 if (p["id"] == pid){
-                    p["dc"].send(`${client}=0`)
+                    //p["dc"].send(`${client}=0`)
+                    tracks = remoteStream.getTracks()
+                    tracks.forEach((track) => {
+                        track.stop();
+                    });
                 }
             })
             button.innerText = "Stop"
@@ -181,6 +203,7 @@
                 console.log(`pid = ${pid}`)
                 if (p["id"] == pid){
                     p["dc"].send(`${client}=1`)
+                    
                 }
             })
             resume.innerText = "Resume"
