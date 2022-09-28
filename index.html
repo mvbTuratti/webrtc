@@ -78,15 +78,16 @@
                 remoteStream = e.streams[0];
             }
             const dc = peerConnection.createDataChannel("channel");
-            dc.onmessage = e => alert(e);
+            dc.onmessage = e => {
+                [id, cmd] = e.data.split("=");
+                console.log(id)
+            };
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-            stack.push({"id": client, "pc":peerConnection});
+            stack.push({"id": client, "pc":peerConnection, "dc": dc});
             peerConnection.onicecandidate = e => {
-                ice.value = JSON.stringify(peerConnection.localDescription)
+                ice.value = JSON.stringify({"id":client, "pc": peerConnection.localDescription})
             }
             
-            
-            dc.onopen = e => drawPeer();
             peerConnection.createOffer().then( o => 
                 peerConnection.setLocalDescription(o)    
             ).then(p => console.log("set succesfully"))
@@ -115,14 +116,15 @@
         }
         function iniciarPeer() {
             let peer = JSON.parse(document.getElementById("peer").value)
-            switch (peer["type"]) {
+            switch (peer["pc"]["type"]) {
                 case "offer":
                     answerPeer(peer)
                     break;
                 case "answer":
                     let peerConnection = stack.pop();
-                    peerConnection["pc"].setRemoteDescription(peer)
-                    pc.push(peerConnection);
+                    peerConnection["dc"].onopen = e => drawPeer(peer["id"]);
+                    peerConnection["pc"].setRemoteDescription(peer["pc"])
+                    pc.push({"id": peer["id"], "pc": peerConnection["pc"], "dc": peerConnection["dc"]});
                 default:
                     break;
             }
@@ -134,20 +136,23 @@
             peerConnection.ontrack = e => {
                 remoteStream = e.streams[0];
             }
-            peerConnection.onicecandidate = e => answer.value = JSON.stringify(peerConnection.localDescription)
+            peerConnection.onicecandidate = e => answer.value = JSON.stringify({"id": client, "pc":peerConnection.localDescription})
             peerConnection.ondatachannel = e => {
                 peerConnection.dc = e.channel;
-                peerConnection.dc.onmessage = e => alert(e);
+                peerConnection.dc.onmessage = e => {
+                    [id, cmd] = e.data.split("=");
+                    console.log(id)
+                }
                 peerConnection.dc.onopen = e => {
-                    drawPeer()
-                    pc.push({"id":peer["id"], "pc": peerConnection});
+                    pc.push({"id":peer["id"], "pc": peerConnection, "dc": peerConnection.dc});
+                    drawPeer(peer["id"])
                 } 
             }
             peerConnection.setRemoteDescription(peer["pc"]).then(a => console.log("offer set"))
             peerConnection.createAnswer().then(a => peerConnection.setLocalDescription(a)).then(a => console.log("answer created"))
         }
 
-        function drawPeer() {
+        function drawPeer(pid) {
             let iDiv = document.createElement('div');
             iDiv.className = 'box';
             
@@ -158,30 +163,35 @@
             video.autoplay = true;
             video.playsInline = true;
             video.controls = false;
-            let rnd = getRandomInt(1,999999);
-            video.id = "video" + rnd;
-            console.log("video" + rnd);
+            video.id = "video-" + pid;
             iDiv.appendChild(video);
             let button = document.createElement('button');
-            button.onclick = () => alert("Stop");
+            button.onclick = () => pc.forEach(p => {
+                console.log(`p = ${ {p} }`)
+                console.log(`pid = ${pid}`)
+                if (p["id"] == pid){
+                    p["dc"].send(`${client}=0`)
+                }
+            })
             button.innerText = "Stop"
             iDiv.appendChild(button)
             let resume = document.createElement('button');
-            resume.onclick = () =>  alert("Resume");
+            resume.onclick = () =>  pc.forEach(p => {
+                console.log(`p = ${ {p} }`)
+                console.log(`pid = ${pid}`)
+                if (p["id"] == pid){
+                    p["dc"].send(`${client}=1`)
+                }
+            })
             resume.innerText = "Resume"
             iDiv.appendChild(resume)
             document.getElementsByClassName('container3')[0].appendChild(iDiv);
-            setStream("video" + rnd);
+            setStream("video-" + pid);
         }
         function setStream(id) {
             const remoteVideo = document.getElementById(id);
             remoteVideo.srcObject = remoteStream;
 
-        }
-        function getRandomInt(min, max) {
-            min = Math.ceil(min);
-            max = Math.floor(max);
-            return Math.floor(Math.random() * (max - min) + min); // The maximum is exclusive and the minimum is inclusive
         }
 
         function dec2hex (dec) {
