@@ -75,21 +75,13 @@
         function createOffer() {
             let peerConnection = new RTCPeerConnection(configuration);
             peerConnection.ontrack = e => {
+                //console.log(e.streams)
                 remoteStream = e.streams[0];
             }
     
-            const dc = peerConnection.createDataChannel("channel");
+            let dc = peerConnection.createDataChannel("channel");
             dc.onmessage = e => {
-                [id, cmd] = e.data.split("=");
-                pc.forEach( p => {
-                    if (p["id"] == id){
-                        if (cmd == 1){
-                            localStream.getTracks().forEach(track => p["pc"].addTrack(track, localStream));
-                        } else {
-                            localStream.getTracks().forEach(track => peerConnection.removeTrack(track, localStream));
-                        }
-                    }
-                })
+                messages(e)
             };
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             stack.push({"id": client, "pc":peerConnection, "dc": dc});
@@ -100,6 +92,7 @@
             peerConnection.createOffer().then( o => 
                 peerConnection.setLocalDescription(o)    
             ).then(p => console.log("set succesfully"))
+            console.log( "estado " + dc.readyState)
         }
         
         function videoStart() {
@@ -131,7 +124,11 @@
                     break;
                 case "answer":
                     let peerConnection = stack.pop();
-                    peerConnection["dc"].onopen = e => drawPeer(peer["id"]);
+                    console.log( "estado " + peerConnection["dc"].readyState)
+                    peerConnection["dc"].onopen = e => {
+                        console.log("estado " + peerConnection["dc"].readyState)
+                        drawPeer(peer["id"]);
+                    }
                     peerConnection["pc"].setRemoteDescription(peer["pc"])
                     pc.push({"id": peer["id"], "pc": peerConnection["pc"], "dc": peerConnection["dc"]});
                 default:
@@ -143,24 +140,16 @@
             
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             peerConnection.ontrack = e => {
+                //console.log(e.streams)
                 remoteStream = e.streams[0];
             }
             peerConnection.onicecandidate = e => answer.value = JSON.stringify({"id": client, "pc":peerConnection.localDescription})
             peerConnection.ondatachannel = e => {
                 peerConnection.dc = e.channel;
                 peerConnection.dc.onmessage = e => {
-                    [id, cmd] = e.data.split("=");
-                    console.log("cmd = " + cmd)
-                    pc.forEach( p => {
-                        if (p["id"] == id){
-                            if (cmd){
-                                localStream.getTracks().forEach(track => p["pc"].addTrack(track, localStream));
-                            } else {
-                                localStream.getTracks().forEach(track => peerConnection.removeTrack(track, localStream));
-                            }
-                        }
-                    })
+                    messages(e);
                 }
+                
                 peerConnection.dc.onopen = e => {
                     pc.push({"id":peer["id"], "pc": peerConnection, "dc": peerConnection.dc});
                     drawPeer(peer["id"])
@@ -188,11 +177,8 @@
                 console.log(`p = ${ {p} }`)
                 console.log(`pid = ${pid}`)
                 if (p["id"] == pid){
-                    //p["dc"].send(`${client}=0`)
-                    tracks = remoteStream.getTracks()
-                    tracks.forEach((track) => {
-                        track.stop();
-                    });
+                    p["dc"].send(`${client}=0`)
+                    
                 }
             })
             button.innerText = "Stop"
@@ -212,7 +198,7 @@
             setStream("video-" + pid);
         }
         function setStream(id) {
-            const remoteVideo = document.getElementById(id);
+            let remoteVideo = document.getElementById(id);
             remoteVideo.srcObject = remoteStream;
 
         }
@@ -226,6 +212,116 @@
             var arr = new Uint8Array((len || 40) / 2)
             window.crypto.getRandomValues(arr)
             return Array.from(arr, dec2hex).join('')
+        }
+
+        function messages(e) {
+            try {
+                cmd = JSON.parse(e.data);
+                console.log(cmd)
+                switch (cmd["type"]) {
+                    case "offer":
+                        console.log("into offer!!")
+                        let channel = pc.find(element => element["id"] == cmd["info"]["id"]);
+                        
+                        response(cmd["info"], channel["dc"])
+                        break;
+                    case "response":
+                        console.log("RESPONSE!!")
+                        let peerConnection = stack.pop();
+                        console.log(peerConnection["pc"])
+                        console.log( "estado " + peerConnection["dc"].readyState)
+                        peerConnection["dc"].onopen = q => {
+                            console.log("here")
+                            setStream("video-" +cmd["info"]["id"])};
+                        console.log(cmd["info"]["pc"])
+                        peerConnection["pc"].setRemoteDescription(cmd["info"]["pc"]).then(q => console.log(peerConnection["pc"]))
+                        pc = pc.filter(e => e["id"] != cmd["info"]["id"])
+                        console.log("heeeere")
+                        
+                        pc.push({"id": peer["id"], "pc": peerConnection["pc"], "dc": peerConnection["dc"]});
+                        break;
+                    default:
+                        break;
+                }
+            } catch (error) {
+                [id, cmd] = e.data.split("=");
+                console.log("cmd " + cmd)
+                pc.forEach( p => {
+                    if (p["id"] == id){
+                        if (cmd == '0'){
+                            //console.log( "ppc" + p["pc"])
+                            //console.log( "getsenders" + p["pc"].getSenders())
+
+                            p["pc"].getSenders().forEach(sender => 
+                                {
+                                    //console.log("here2")
+                                    //console.log(sender.track)
+                                    //    console.log(sender.track.kind)
+                                    if (sender.track.kind && sender.track.kind === "video"){
+                                        p["pc"].removeTrack(sender);
+                                    }
+                                }
+                            )
+                        } else {
+                            //console.log( "ppc" + p["pc"])
+                            //console.log( "video track?" + localStream.getVideoTracks()[0])
+
+
+                            let peerConnection = new RTCPeerConnection(configuration);
+                            peerConnection.ontrack = e => {
+                                //console.log(e.streams)
+                                remoteStream = e.streams[0];
+                                //setStream("video-" +p["id"])
+                            }
+   
+                            let dc = peerConnection.createDataChannel("channel");
+                            dc.onmessage = e => {
+                                messages(e)
+                            };
+                            console.log( "estado " + dc.readyState)
+                            console.log(peerConnection)
+                            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+                            peerConnection.createOffer().then( o => peerConnection.setLocalDescription(o)).then(z => {
+                                stack.push({"id": p["id"], "pc":peerConnection, "dc": dc});
+                                console.log(peerConnection)
+                                p["dc"].send(JSON.stringify({"type": "offer","info" :{"id":client, "pc": peerConnection.localDescription}}))
+                            })
+                        }
+                    }
+                })
+            }
+
+            function response(payload, channel) {
+                console.log("INTO RESPONSE!")
+                console.log(payload)
+                let peerConnection2 = new RTCPeerConnection(configuration);
+                
+                localStream.getTracks().forEach(track => peerConnection2.addTrack(track, localStream));
+                peerConnection2.ontrack = e => {
+                    //console.log(e.streams)
+                    remoteStream = e.streams[0];
+                }
+                peerConnection2.ondatachannel = e => {
+                    console.log("entrei no data channel" + e.channel);
+                    peerConnection2.dc = e.channel;
+                    peerConnection2.dc.onmessage = e => {
+                        messages(e);
+                    }
+                    
+                    peerConnection2.dc.onopen = e => {
+                        console.log("Data channel opened!!")
+                        pc = pc.filter(p => p["id"] != payload["id"])
+                        pc.push({"id":payload["id"], "pc": peerConnection2, "dc": peerConnection2.dc});
+                        setStream("video-" + payload["id"]);
+                    } 
+                }
+                console.log(peerConnection2)
+                peerConnection2.setRemoteDescription(payload["pc"]).then(a => console.log("offer set"))
+                peerConnection2.createAnswer().then(a => peerConnection2.setLocalDescription(a)).then(a => {
+                    console.log(peerConnection2)
+                    channel.send(JSON.stringify({"type": "response","info" : {"id": client, "pc":peerConnection2.localDescription}}))})
+            }
+            
         }
     </script>
 </body>
