@@ -71,9 +71,10 @@
         let answer = document.getElementById("answer");
         let localStream;
         let remoteStream;
-
+        var peerConnection = null;
+        var peerConnection2 = null;
         function createOffer() {
-            var peerConnection = new RTCPeerConnection(configuration);
+            peerConnection = new RTCPeerConnection(configuration);
             peerConnection.ontrack = e => {
                 console.log("trackssssss on creator")
                 console.log(e.streams)
@@ -129,7 +130,7 @@
                     answerPeer(peer)
                     break;
                 case "answer":
-                    var peerConnection = stack.pop();
+                    peerConnection = stack.pop();
                     console.log( "estado " + peerConnection["dc"].readyState)
                     peerConnection["dc"].onopen = e => {
                         console.log("estado " + peerConnection["dc"].readyState)
@@ -142,7 +143,7 @@
             }
         }
         function answerPeer(peer) {
-            var peerConnection = new RTCPeerConnection(configuration);
+            peerConnection = new RTCPeerConnection(configuration);
             
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             peerConnection.ontrack = e => {
@@ -316,7 +317,7 @@
             function response(payload, channel) {
                 console.log("INTO RESPONSE!")
                 console.log(payload)
-                var peerConnection2 = new RTCPeerConnection(configuration);
+                peerConnection2 = new RTCPeerConnection(configuration);
                 
                 localStream.getTracks().forEach(track => peerConnection2.addTrack(track, localStream));
                 peerConnection2.ontrack = e => {
